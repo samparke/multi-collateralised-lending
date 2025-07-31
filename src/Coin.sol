@@ -9,6 +9,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
     // errors
     error Coin__MustBeMoreThanZero();
+    error Coin__CannotBeZeroAddress();
 
     // state variables
     bytes32 public constant MINT_AND_BURN_ROLE = keccak256("MINT_AND_BURN_ROLE");
@@ -29,5 +30,16 @@ contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
         grantRole(MINT_AND_BURN_ROLE, _user);
     }
 
-    function mint(uint256 _amount) external moreThanZero(_amount) {}
+    function mint(address _user, uint256 _amount)
+        external
+        moreThanZero(_amount)
+        onlyRole(MINT_AND_BURN_ROLE)
+        returns (bool)
+    {
+        if (_user == address(0)) {
+            revert Coin__CannotBeZeroAddress();
+        }
+        _mint(_user, _amount);
+        return true;
+    }
 }
