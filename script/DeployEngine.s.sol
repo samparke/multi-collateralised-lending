@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.20;
 
 import {Script} from "forge-std/Script.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
@@ -26,7 +26,7 @@ contract DeployEngine is Script {
 
         vm.startBroadcast(deployerKey);
         Coin coin = new Coin();
-        Engine engine = new Engine(priceFeedAddresses, tokenAddresses, coin);
+        Engine engine = new Engine(priceFeedAddresses, tokenAddresses, address(coin));
         coin.transferOwnership(address(engine));
         vm.stopBroadcast();
         return (engine, coin, config);
