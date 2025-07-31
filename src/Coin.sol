@@ -10,6 +10,7 @@ contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
     // errors
     error Coin__MustBeMoreThanZero();
     error Coin__CannotBeZeroAddress();
+    error Coin__BalanceMustBeMoreThanBurnAmount();
 
     // state variables
     bytes32 public constant MINT_AND_BURN_ROLE = keccak256("MINT_AND_BURN_ROLE");
@@ -26,10 +27,19 @@ contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
         grantMintAndBurnRole(msg.sender);
     }
 
+    /**
+     * @notice grants access to accounts to mint and burn Coin
+     * @param _user the user we are granting the mint and burn role, this will be the engine/vault
+     */
     function grantMintAndBurnRole(address _user) public onlyOwner {
         grantRole(MINT_AND_BURN_ROLE, _user);
     }
 
+    /**
+     * @notice mints Coin after collateral is deposited
+     * @param _user the user we are minting Coin to
+     * @param _amount the amount of Coin we are minting
+     */
     function mint(address _user, uint256 _amount)
         external
         moreThanZero(_amount)
@@ -41,5 +51,16 @@ contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
         }
         _mint(_user, _amount);
         return true;
+    }
+
+    /**
+     * @notice burns Coin
+     * @param _amount the amount of Coin we are burning
+     */
+    function burn(uint256 _amount) public override moreThanZero(_amount) onlyRole(MINT_AND_BURN_ROLE) {
+        if (balanceOf(msg.sender) < _amount) {
+            revert Coin__BalanceMustBeMoreThanBurnAmount();
+        }
+        super.burn(_amount);
     }
 }
