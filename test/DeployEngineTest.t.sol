@@ -31,6 +31,8 @@ contract DeployEngineTest is Test {
         ERC20Mock(weth).mint(user, AMOUNT_MINT);
     }
 
+    // getter tests
+
     function testGetCollateralTokensAreWethAndWbtc() public view {
         address[] memory tokens = engine.getCollateralTokens();
         assertEq(tokens[0], weth);

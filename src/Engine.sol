@@ -7,13 +7,37 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract Engine {
     // errors
     error Engine__TokenAddressesAndPriceFeedAddressesMustBeTheSameLength();
+    error Engine__TransferFailed();
+    error Engine__MustBeMoreThanZero();
+    error Engine__UnacceptedToken();
 
     // state variables
     mapping(address token => address priceFeed) private s_priceFeeds;
     mapping(address user => mapping(address token => uint256 amountDeposited)) private s_collateralDeposited;
     mapping(address user => uint256) private s_coinMinted;
-    address[] private collateralTokens;
+    address[] private s_collateralTokens;
     Coin private immutable i_coin;
+
+    modifier moreThanZero(uint256 _amount) {
+        if (_amount == 0) {
+            revert Engine__MustBeMoreThanZero();
+        }
+        _;
+    }
+
+    /**
+     * @notice this modifier is used when a user deposits collateral. It checks whether the token they are depositing is accepted in our protocol
+     * @param _token this is the token they are depositing
+     * @dev if the _token they are depositing is address(0) (0x000000...), it means we have not assigned it a token address
+     * remember, we assigned weth the address 0xdd13E55209Fd76AfE204dBda4007C227904f0a81 and wbtc 0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063 (sepolia)
+     * therefore, if the token they are depositing does not have any of these addresses, we have not initalised it, meaning it will be address(0)
+     */
+    modifier isAllowedToken(address _token) {
+        if (s_priceFeeds[_token] == address(0)) {
+            revert Engine__UnacceptedToken();
+        }
+        _;
+    }
 
     /**
      *
@@ -32,10 +56,41 @@ contract Engine {
         for (uint256 i = 0; i < _tokenAddresses.length; i++) {
             s_priceFeeds[_tokenAddresses[i]] = _priceFeedAddresses[i];
             // we then push the tokenAddress into the collateralToken array too
-            collateralTokens.push(_tokenAddresses[i]);
+            s_collateralTokens.push(_tokenAddresses[i]);
         }
         i_coin = Coin(_coin);
     }
+
+    // core functions
+
+    /**
+     * @notice this function allows the user to deposit collateral. This will increase their health factor and allow them to mint COIN (if they wish)
+     * @param _collateralTokenToDeposit this is the collateral token the user is depositing. For example, weth or wbtc.
+     * @param _amount the amount of collateral they are depositing. For example, 1 weth.
+     */
+    function depositCollateral(address _collateralTokenToDeposit, uint256 _amount)
+        external
+        moreThanZero(_amount)
+        isAllowedToken(_collateralTokenToDeposit)
+    {
+        s_collateralDeposited[msg.sender][_collateralTokenToDeposit] += _amount;
+        bool success = IERC20(_collateralTokenToDeposit).transferFrom(msg.sender, address(this), _amount);
+        if (!success) {
+            revert Engine__TransferFailed();
+        }
+    }
+
+    function depositCollateralAndMintCoin(address _collateralTokenToDeposit, uint256 _amount) external {
+        s_collateralDeposited[msg.sender][_collateralTokenToDeposit] += _amount;
+    }
+
+    function redeemCollateral(address _collateralTokenToRedeem, uint256 _amount) external {
+        s_collateralDeposited[msg.sender][_collateralTokenToRedeem] -= _amount;
+    }
+
+    function mintCoin() external {}
+
+    function burnCoin() external {}
 
     // getter functions
 
@@ -43,7 +98,7 @@ contract Engine {
      * @notice fetches the collateral tokens accepted in this protocol. For example, WETH
      */
     function getCollateralTokens() external view returns (address[] memory) {
-        return collateralTokens;
+        return s_collateralTokens;
     }
 
     /**
