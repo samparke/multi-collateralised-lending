@@ -23,16 +23,14 @@ contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
         _;
     }
 
-    constructor() ERC20("Coin", "COIN") Ownable(msg.sender) {
-        grantMintAndBurnRole(msg.sender);
-    }
+    constructor() ERC20("Coin", "COIN") Ownable(msg.sender) {}
 
     /**
      * @notice grants access to accounts to mint and burn Coin
      * @param _user the user we are granting the mint and burn role, this will be the engine/vault
      */
-    function grantMintAndBurnRole(address _user) public onlyOwner {
-        grantRole(MINT_AND_BURN_ROLE, _user);
+    function grantMintAndBurnRole(address _user) external onlyOwner {
+        _grantRole(MINT_AND_BURN_ROLE, _user);
     }
 
     /**
