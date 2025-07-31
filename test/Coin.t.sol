@@ -38,6 +38,11 @@ contract CoinTest is Test {
         coin.mint(user, amountMint);
     }
 
+    function testMintFromZeroAddress() public {
+        vm.expectRevert(Coin.Coin__CannotMintToZeroAddress.selector);
+        coin.mint(address(0), amountMint);
+    }
+
     // burn
     function testBurnReducesBalance() public {
         coin.mint(address(this), amountMint);
@@ -58,5 +63,11 @@ contract CoinTest is Test {
         vm.prank(user);
         vm.expectPartialRevert(IAccessControl.AccessControlUnauthorizedAccount.selector);
         coin.burn(amountMint);
+    }
+
+    function testBurnExceedsBalanceRevert() public {
+        // we never mint this contract any Coin, so 1 ether (in equivalence to Coin) is more than balance
+        vm.expectRevert(Coin.Coin__BalanceMustBeMoreThanBurnAmount.selector);
+        coin.burn(1 ether);
     }
 }

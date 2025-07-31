@@ -9,7 +9,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
     // errors
     error Coin__MustBeMoreThanZero();
-    error Coin__CannotBeZeroAddress();
+    error Coin__CannotMintToZeroAddress();
     error Coin__BalanceMustBeMoreThanBurnAmount();
 
     // state variables
@@ -45,7 +45,7 @@ contract Coin is ERC20, ERC20Burnable, Ownable, AccessControl {
         returns (bool)
     {
         if (_user == address(0)) {
-            revert Coin__CannotBeZeroAddress();
+            revert Coin__CannotMintToZeroAddress();
         }
         _mint(_user, _amount);
         return true;
