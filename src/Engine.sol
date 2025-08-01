@@ -14,6 +14,7 @@ contract Engine {
     error Engine__RedeemAmountHigherThanDeposited();
     error Engine__InsufficientBalance();
     error Engine__BrokenHealthFactor(uint256 healthFactor);
+    error Engine__MintFailed(address user);
 
     // state variables
     mapping(address token => address priceFeed) private s_priceFeeds;
@@ -97,26 +98,74 @@ contract Engine {
         }
     }
 
-    function depositCollateralAndMintCoin(address _collateralTokenToDeposit, uint256 _amount) external {
-        if (IERC20(_collateralTokenToDeposit).balanceOf(msg.sender) < _amount) {
-            revert Engine__InsufficientBalance();
-        }
-        s_collateralDeposited[msg.sender][_collateralTokenToDeposit] += _amount;
+    /**
+     * @notice this function allows the user to deposit collateral and mint in one transactiom
+     * @param _collateralTokenToDeposit the specific token to deposit
+     * @param _amount the amount to deposit, and thus to mint
+     */
+    function depositCollateralAndMintCoin(address _collateralTokenToDeposit, uint256 _amount) public {
         depositCollateral(_collateralTokenToDeposit, _amount);
-        // mint coin
+        mintCoin(_amount);
     }
 
-    function redeemCollateral(address _collateralTokenToRedeem, uint256 _amount) external {
-        if (s_collateralDeposited[msg.sender][_collateralTokenToRedeem] < _amount) {
+    /**
+     *
+     * @param _tokenCollateralAddress the token we are redeeming
+     * @param _amount the amount the redeem
+     * @param burnAmount the amount we burn, to allow us to redeem the collateral. Before redeeming collateral, we must burn the COIN
+     * this is what gives the protocol stability
+     */
+    function redeemCollateralForCoin(address _tokenCollateralAddress, uint256 _amount, uint256 burnAmount) public {
+        burnCoin(burnAmount);
+        redeemCollateral(_tokenCollateralAddress, _amount);
+    }
+
+    /**
+     * @notice this is the redeem function for users to redeem the collateral deposited. This will be the function
+     * called by general users and not liquidators
+     * @param _collateralTokenToRedeem the specific token the user wants to redeem (such as wbtc, if they deposited wbtc)
+     * @param _amount the amount to redeem
+     */
+    function redeemCollateral(address _collateralTokenToRedeem, uint256 _amount) public {
+        // because the user is the one calling this, the _redeemCollateral '_from' will be the msg.sender, as well as the 'to'
+        // we use the _from when reducing the mapping for deposited from the user, and _to when transfering the collateral
+        // this contrasts when liquidating, where the from is the user we are liquiding (reducing their deposited amount and improving their health factor)
+        // and to is the liquidator, who we transfer collateral to
+        _redeemCollateral(_collateralTokenToRedeem, _amount, msg.sender, msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
+
+    /**
+     * @notice the internal function to transfer collateral to caller. This is the function called directly by liquidator
+     * @param _collateralTokenToRedeem the specific token the user wants to redeem (such as wbtc, if they deposited wbtc)
+     * @param _amount the amount to redeem
+     */
+    function _redeemCollateral(address _collateralTokenToRedeem, uint256 _amount, address _from, address _to)
+        internal
+    {
+        if (s_collateralDeposited[_from][_collateralTokenToRedeem] < _amount) {
             revert Engine__RedeemAmountHigherThanDeposited();
         }
-        s_collateralDeposited[msg.sender][_collateralTokenToRedeem] -= _amount;
-        IERC20(_collateralTokenToRedeem).transfer(msg.sender, _amount);
+        s_collateralDeposited[_from][_collateralTokenToRedeem] -= _amount;
+        bool success = IERC20(_collateralTokenToRedeem).transfer(_to, _amount);
+        if (!success) {
+            revert Engine__TransferFailed();
+        }
     }
 
-    function mintCoin(uint256 _amount) external moreThanZero(_amount) {
+    /**
+     * @notice mints user coin
+     * @param _amount the amount of coin we are wanting to mint
+     */
+    function mintCoin(uint256 _amount) public moreThanZero(_amount) {
+        // before allowing the user to mint, we must check their their health factor
+        // if their health factor is below 1 (1e18), we do not allow them to mint
         _revertIfHealthFactorIsBroken(msg.sender);
         s_coinMinted[msg.sender] += _amount;
+        bool success = i_coin.mint(msg.sender, _amount);
+        if (!success) {
+            revert Engine__MintFailed(msg.sender);
+        }
     }
 
     /**
@@ -125,8 +174,10 @@ contract Engine {
      * but also liquidators burning coin on behalf of another, we create an internal _burnCoin)
      * @param _amount the amount of coin we are burning
      */
-    function burnCoin(uint256 _amount) external moreThanZero(_amount) {
+    function burnCoin(uint256 _amount) public moreThanZero(_amount) {
         _burnCoin(msg.sender, msg.sender, _amount);
+        // in theory, as burning would improve the users health factor, this function should never be called
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
 
     /**
