@@ -13,6 +13,7 @@ contract Engine {
     error Engine__UnacceptedToken();
     error Engine__RedeemAmountHigherThanDeposited();
     error Engine__InsufficientBalance();
+    error Engine__BrokenHealthFactor(uint256 healthFactor);
 
     // state variables
     mapping(address token => address priceFeed) private s_priceFeeds;
@@ -152,8 +153,18 @@ contract Engine {
     // HEALTH FACTOR
     // --------------------------------------------------------------------------------------------------------
 
-    function _revertIfHealthFactorIsBroken(address _user) internal {
-        _healthFactor(_user);
+    /**
+     * @notice this function will revert any other function if the users health factor is broken.
+     * For example, before minting we will see if the users health factor is good. If not, we revert using this function
+     * @param _user the user we are assessing whether the health factor of
+     */
+    function _revertIfHealthFactorIsBroken(address _user) internal view {
+        // from our _calculateHealthFactor function, we will receive a value either above or below 1e18
+        // above 1e18 is good, below is bad
+        uint256 userHealthFactor = _healthFactor(_user);
+        if (userHealthFactor < MINIMUM_HEALTH_FACTOR) {
+            revert Engine__BrokenHealthFactor(userHealthFactor);
+        }
     }
 
     function _healthFactor(address _user) public view returns (uint256) {
