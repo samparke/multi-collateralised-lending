@@ -27,6 +27,7 @@ contract DeployEngine is Script {
         vm.startBroadcast(deployerKey);
         Coin coin = new Coin();
         Engine engine = new Engine(priceFeedAddresses, tokenAddresses, address(coin));
+        coin.grantMintAndBurnRole(address(engine));
         coin.transferOwnership(address(engine));
         vm.stopBroadcast();
         return (engine, coin, config);

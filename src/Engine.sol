@@ -14,7 +14,7 @@ contract Engine {
     error Engine__RedeemAmountHigherThanDeposited();
     error Engine__InsufficientBalance();
     error Engine__BrokenHealthFactor(uint256 healthFactor);
-    error Engine__MintFailed(address user);
+    error Engine__MintFailed();
 
     // events
     event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
@@ -170,7 +170,7 @@ contract Engine {
         s_coinMinted[msg.sender] += _amount;
         bool success = i_coin.mint(msg.sender, _amount);
         if (!success) {
-            revert Engine__MintFailed(msg.sender);
+            revert Engine__MintFailed();
         }
     }
 

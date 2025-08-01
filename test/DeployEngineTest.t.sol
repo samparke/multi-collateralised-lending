@@ -8,6 +8,7 @@ import {DeployEngine} from "../script/DeployEngine.s.sol";
 import {ERC20Mock} from "../test/mocks/ERC20Mock.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MockERCMintFail} from "../test/mocks/MockERCMintFail.sol";
 
 contract DeployEngineTest is Test {
     DeployEngine deployer;
@@ -21,6 +22,8 @@ contract DeployEngineTest is Test {
     address user = makeAddr("user");
     uint256 public constant AMOUNT_MINT = 100 ether;
     uint256 public amountCollateral = 10 ether;
+    address[] public tokenAddresses;
+    address[] public priceFeed;
 
     event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
     event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
@@ -107,5 +110,69 @@ contract DeployEngineTest is Test {
         vm.expectRevert(Engine.Engine__InsufficientBalance.selector);
         engine.depositCollateral(weth, 101 ether);
         vm.stopPrank();
+    }
+
+    function testDepositAndMintCoinIncreasesUserDepositMappingAndCoinBalance() public {
+        uint256 userStartingDepositAmount = engine.getCollateralAmountUserDeposited(user, weth);
+        uint256 userStartingMintBalance = coin.balanceOf(user);
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(engine), amountCollateral);
+        engine.depositCollateralAndMintCoin(weth, amountCollateral);
+        vm.stopPrank();
+
+        uint256 userDepositAmount = engine.getCollateralAmountUserDeposited(user, weth);
+        uint256 userMintBalance = coin.balanceOf(user);
+
+        assertGt(userDepositAmount, userStartingDepositAmount);
+        assertGt(userMintBalance, userStartingMintBalance);
+    }
+
+    // redeem
+
+    function testRedeemCollateralBalancenIncreasesAndMappingDecreases() public depositCollateral {
+        uint256 userCollateralBalanceBeforeRedeeming = ERC20Mock(weth).balanceOf(user);
+        uint256 userMappingDepositedBeforeRedeeming = engine.getCollateralAmountUserDeposited(user, weth);
+        console.log("user mapping", userMappingDepositedBeforeRedeeming);
+        vm.startPrank(user);
+        engine.redeemCollateral(weth, amountCollateral);
+        vm.stopPrank();
+        uint256 userCollateralBalanceAfterRedeeming = ERC20Mock(weth).balanceOf(user);
+        uint256 userMappingDepositedAfterRedeeming = engine.getCollateralAmountUserDeposited(user, weth);
+
+        assertGt(userCollateralBalanceAfterRedeeming, userCollateralBalanceBeforeRedeeming);
+        assertGt(userMappingDepositedBeforeRedeeming, userMappingDepositedAfterRedeeming);
+    }
+
+    function testRedeemMoreThanDepositBalance() public depositCollateral {
+        vm.startPrank(user);
+        vm.expectRevert(Engine.Engine__RedeemAmountHigherThanDeposited.selector);
+        engine.redeemCollateral(weth, amountCollateral + 1);
+        vm.stopPrank();
+    }
+
+    // mint
+
+    function testMintNeedsMoreThanZeroRevert() public {
+        vm.expectRevert(Engine.Engine__MustBeMoreThanZero.selector);
+        engine.mintCoin(0);
+    }
+
+    function testMintFailRevert() public depositCollateral {
+        MockERCMintFail token = new MockERCMintFail();
+        priceFeed = [wethUsdPriceFeed];
+        tokenAddresses = [weth];
+        Engine mockEngine = new Engine(priceFeed, tokenAddresses, address(token));
+
+        vm.startPrank(user);
+        vm.expectRevert(Engine.Engine__MintFailed.selector);
+        mockEngine.mintCoin(1);
+        vm.stopPrank();
+    }
+
+    // burn
+
+    function testBurnNeedsMoreThanZeroRevert() public {
+        vm.expectRevert(Engine.Engine__MustBeMoreThanZero.selector);
+        engine.burnCoin(0);
     }
 }
