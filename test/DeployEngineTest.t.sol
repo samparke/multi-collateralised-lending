@@ -152,6 +152,21 @@ contract DeployEngineTest is Test {
         vm.stopPrank();
     }
 
+    function testRedeemFail() public {
+        MockFailTransfer token = new MockFailTransfer();
+        priceFeed = [wethUsdPriceFeed];
+        tokenAddresses = [address(token)];
+        Engine mockEngine = new Engine(priceFeed, tokenAddresses, address(token));
+        token.mint(user, amountCollateral);
+        vm.startPrank(user);
+        ERC20Mock(address(token)).approve(address(mockEngine), amountCollateral);
+        mockEngine.depositCollateral(address(token), amountCollateral);
+        vm.expectRevert(Engine.Engine__TransferFailed.selector);
+        mockEngine.redeemCollateral(address(token), 1 ether);
+        console.log("user balance after redeeming", ERC20Mock(weth).balanceOf(user));
+        vm.stopPrank();
+    }
+
     // mint
 
     function testMintNeedsMoreThanZeroRevert() public {
