@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Coin} from "../src/Coin.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract Engine {
     // errors
@@ -63,7 +64,9 @@ contract Engine {
         i_coin = Coin(_coin);
     }
 
-    // core functions
+    // --------------------------------------------------------------------------------------------------------
+    // DEPOSIT COLLATERAL
+    // --------------------------------------------------------------------------------------------------------
 
     /**
      * @notice this function allows the user to deposit collateral. This will increase their health factor and allow them to mint COIN (if they wish)
@@ -103,6 +106,7 @@ contract Engine {
     }
 
     function mintCoin(uint256 _amount) external moreThanZero(_amount) {
+        _revertIfHealthFactorIsBroken(msg.sender);
         s_coinMinted[msg.sender] += _amount;
     }
 
@@ -136,30 +140,79 @@ contract Engine {
         i_coin.burn(_amount);
     }
 
-    // getter functions
+    // --------------------------------------------------------------------------------------------------------
+    // HEALTH FACTOR
+    // --------------------------------------------------------------------------------------------------------
+
+    function _revertIfHealthFactorIsBroken(address _user) internal {
+        healthFactor(_user);
+    }
+
+    function healthFactor(address _user) public {
+        getAccountInformation(_user);
+    }
+
+    function getAccountInformation(address _user)
+        public
+        view
+        returns (uint256 totalCoinMinted, uint256 collateralValueInUsd)
+    {
+        totalCoinMinted = getCoinUserHasMinted(_user);
+        collateralValueInUsd = getAccountCollateralValueInUsd(_user);
+        return (totalCoinMinted, collateralValueInUsd);
+    }
+
+    /**
+     * @notice this function gets the account collateral value
+     * @param _user the user who's account we are calculating the collateral value for
+     * @dev 1. we first get the length of the collateral tokens accepted in our protocol
+     * 2. we loop through the tokens, calculate the current usd value for that token (for example, ETH may be $2000 at the time)
+     * 3. we then multiple the token value by the number of tokens the user holds to get the token value that user holds
+     * 4. for each token the user holds, this value is added to the account value.
+     * @return accountValueInUsd is the total value for that account in usd
+     */
+    function getAccountCollateralValueInUsd(address _user) public view returns (uint256 accountValueInUsd) {
+        address[] memory collateralTokens = getCollateralTokens();
+        for (uint256 i = 0; i < collateralTokens.length; i++) {
+            address token = collateralTokens[i];
+            uint256 tokenValueInUsd = getTokenValueInUsd(token);
+            uint256 userTokenCollateralValue = (s_collateralDeposited[_user][token] * tokenValueInUsd);
+            accountValueInUsd += userTokenCollateralValue;
+        }
+        return accountValueInUsd;
+    }
+
+    /**
+     * @notice this function retrieves the usd price for a token
+     * @param _token the token we are trying to calculate the value for
+     * @dev we pass the price feed address (for example, weth: 0x694AA1769357215DE4FAC081bf1f309aDC325306) into the AggregatorV3Interface
+     * now chainlink knows which token to retrieve the price for (and call the functions on)
+     * we call "latestRoundData()", which, by itself, returns 5 values. Price is the second ('answer')
+     * within the aggregator, it returns a int256 (instead of a uint256), so we convert it to a uint256 in our return
+     */
+    function getTokenValueInUsd(address _token) public view returns (uint256 tokenValue) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[_token]);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+        return uint256(price);
+    }
+
+    // --------------------------------------------------------------------------------------------------------
+    // GETTER
+    // --------------------------------------------------------------------------------------------------------
 
     /**
      * @notice fetches the collateral tokens accepted in this protocol. For example, WETH
      * @return an array of the collateral tokens
      */
-    function getCollateralTokens() external view returns (address[] memory) {
+    function getCollateralTokens() public view returns (address[] memory) {
         return s_collateralTokens;
-    }
-
-    /**
-     * @notice fetches the collateral amount the user deposited. For example, user 1 might have deposited 1 WETH and user 2 might have deposited 5 WETH
-     * @param _user the user we want to see the collateral deposited amount for
-     * @param _token the specific token we want to see how much they deposited
-     */
-    function getCollateralAmountUserDeposited(address _user, address _token) external view returns (uint256) {
-        return s_collateralDeposited[_user][_token];
     }
 
     /**
      * @notice fetches the coin amount minted for a specific user
      * @param _user the user we want to see how much coin has been minted for
      */
-    function getUserCoinMinted(address _user) external view returns (uint256) {
+    function getCoinUserHasMinted(address _user) public view returns (uint256) {
         return s_coinMinted[_user];
     }
 }
