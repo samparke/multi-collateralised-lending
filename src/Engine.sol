@@ -16,6 +16,10 @@ contract Engine {
     error Engine__BrokenHealthFactor(uint256 healthFactor);
     error Engine__MintFailed(address user);
 
+    // events
+    event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
+    event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
+
     // state variables
     mapping(address token => address priceFeed) private s_priceFeeds;
     mapping(address user => mapping(address token => uint256 amountDeposited)) private s_collateralDeposited;
@@ -96,6 +100,7 @@ contract Engine {
         if (!success) {
             revert Engine__TransferFailed();
         }
+        emit CollateralDeposited(msg.sender, _collateralTokenToDeposit, _amount);
     }
 
     /**
@@ -151,6 +156,7 @@ contract Engine {
         if (!success) {
             revert Engine__TransferFailed();
         }
+        emit CollateralRedeemed(_from, _to, _collateralTokenToRedeem, _amount);
     }
 
     /**
@@ -320,5 +326,9 @@ contract Engine {
      */
     function getCoinUserHasMinted(address _user) public view returns (uint256) {
         return s_coinMinted[_user];
+    }
+
+    function getCollateralAmountUserDeposited(address _user, address _token) external view returns (uint256) {
+        return (s_collateralDeposited[_user][_token]);
     }
 }

@@ -7,6 +7,7 @@ import {Engine} from "../src/Engine.sol";
 import {DeployEngine} from "../script/DeployEngine.s.sol";
 import {ERC20Mock} from "../test/mocks/ERC20Mock.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract DeployEngineTest is Test {
     DeployEngine deployer;
@@ -19,6 +20,7 @@ contract DeployEngineTest is Test {
     address wbtcUsdPriceFeed;
     address user = makeAddr("user");
     uint256 public constant AMOUNT_MINT = 100 ether;
+    uint256 public amountCollateral = 10 ether;
 
     function setUp() public {
         // the deployer is the deploy engine contract
@@ -37,5 +39,29 @@ contract DeployEngineTest is Test {
         address[] memory tokens = engine.getCollateralTokens();
         assertEq(tokens[0], weth);
         assertEq(tokens[1], wbtc);
+    }
+
+    // deposit
+
+    function testDepositWethAndUserMappingIncreases(uint256 amount) public {
+        amount = bound(amount, 1e5, type(uint96).max);
+        ERC20Mock(weth).mint(user, amount);
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(engine), amount);
+        engine.depositCollateral(weth, amount);
+
+        uint256 amountUserDeposited = engine.getCollateralAmountUserDeposited(user, weth);
+        assertEq(amountUserDeposited, amount);
+    }
+
+    function testDepositAndContractBalanceIncreases(uint256 amount) public {
+        amount = bound(amount, 1e5, type(uint96).max);
+        ERC20Mock(weth).mint(user, amount);
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(engine), amount);
+        engine.depositCollateral(weth, amount);
+
+        uint256 contractWethBalance = ERC20Mock(weth).balanceOf(address(this));
+        assertEq(contractWethBalance, amount);
     }
 }
