@@ -20,6 +20,8 @@ contract Engine {
     mapping(address user => uint256) private s_coinMinted;
     address[] private s_collateralTokens;
     Coin private immutable i_coin;
+    uint256 public constant PRECISION = 1e18;
+    uint256 public constant ADDITIONAL_FEED_PRECISION = 1e10;
 
     modifier moreThanZero(uint256 _amount) {
         if (_amount == 0) {
@@ -175,9 +177,8 @@ contract Engine {
         address[] memory collateralTokens = getCollateralTokens();
         for (uint256 i = 0; i < collateralTokens.length; i++) {
             address token = collateralTokens[i];
-            uint256 tokenValueInUsd = getTokenValueInUsd(token);
-            uint256 userTokenCollateralValue = (s_collateralDeposited[_user][token] * tokenValueInUsd);
-            accountValueInUsd += userTokenCollateralValue;
+            uint256 userTokenValueInUsd = getTokenValueInUsd(token, s_collateralDeposited[_user][token]);
+            accountValueInUsd += userTokenValueInUsd;
         }
         return accountValueInUsd;
     }
@@ -190,10 +191,15 @@ contract Engine {
      * we call "latestRoundData()", which, by itself, returns 5 values. Price is the second ('answer')
      * within the aggregator, it returns a int256 (instead of a uint256), so we convert it to a uint256 in our return
      */
-    function getTokenValueInUsd(address _token) public view returns (uint256 tokenValue) {
+    function getTokenValueInUsd(address _token), uint256 _amount public view returns (uint256 tokenValue) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[_token]);
         (, int256 price,,,) = priceFeed.latestRoundData();
-        return uint256(price);
+        // chainlink returns the price in 8 decimals
+        // we scale it up to 18 decimal places (by multiplying by ADDITIONAL_FEED_PRECISION (1e10, 10 decimal places))
+        // then we multiply the now-1e18 price by the 1e18 amount the user has. If we didn't do these conversions,
+        // you'd be multiplying incorrect value (due to confusion with decimal places)
+        // we then scale it back down to usd by multiplying by PRECISION (1e18, 18 decimal places)
+        return (uint256(price) * ADDITIONAL_FEED_PRECISION * amount) / PRECISION;
     }
 
     // --------------------------------------------------------------------------------------------------------
