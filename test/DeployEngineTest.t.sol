@@ -22,6 +22,9 @@ contract DeployEngineTest is Test {
     uint256 public constant AMOUNT_MINT = 100 ether;
     uint256 public amountCollateral = 10 ether;
 
+    event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
+    event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
+
     function setUp() public {
         // the deployer is the deploy engine contract
         deployer = new DeployEngine();
@@ -49,6 +52,7 @@ contract DeployEngineTest is Test {
         vm.startPrank(user);
         ERC20Mock(weth).approve(address(engine), amount);
         engine.depositCollateral(weth, amount);
+        vm.stopPrank();
 
         uint256 amountUserDeposited = engine.getCollateralAmountUserDeposited(user, weth);
         assertEq(amountUserDeposited, amount);
@@ -60,8 +64,20 @@ contract DeployEngineTest is Test {
         vm.startPrank(user);
         ERC20Mock(weth).approve(address(engine), amount);
         engine.depositCollateral(weth, amount);
+        vm.stopPrank();
 
         uint256 contractWethBalance = ERC20Mock(weth).balanceOf(address(this));
         assertEq(contractWethBalance, amount);
+    }
+
+    function testDepositAndDepositEventFires(uint256 amount) public {
+        amount = bound(amount, 1e5, type(uint96).max);
+        ERC20Mock(weth).mint(user, amount);
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(engine), amount);
+        vm.expectEmit(true, true, false, true);
+        emit CollateralDeposited(address(user), address(weth), amount);
+        engine.depositCollateral(weth, amount);
+        vm.stopPrank();
     }
 }
