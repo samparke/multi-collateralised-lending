@@ -10,6 +10,8 @@ contract Engine {
     error Engine__TransferFailed();
     error Engine__MustBeMoreThanZero();
     error Engine__UnacceptedToken();
+    error Engine__RedeemAmountHigherThanDeposited();
+    error Engine__InsufficientBalance();
 
     // state variables
     mapping(address token => address priceFeed) private s_priceFeeds;
@@ -69,10 +71,13 @@ contract Engine {
      * @param _amount the amount of collateral they are depositing. For example, 1 weth.
      */
     function depositCollateral(address _collateralTokenToDeposit, uint256 _amount)
-        external
+        public
         moreThanZero(_amount)
         isAllowedToken(_collateralTokenToDeposit)
     {
+        if (IERC20(_collateralTokenToDeposit).balanceOf(msg.sender) < _amount) {
+            revert Engine__InsufficientBalance();
+        }
         s_collateralDeposited[msg.sender][_collateralTokenToDeposit] += _amount;
         bool success = IERC20(_collateralTokenToDeposit).transferFrom(msg.sender, address(this), _amount);
         if (!success) {
@@ -81,21 +86,61 @@ contract Engine {
     }
 
     function depositCollateralAndMintCoin(address _collateralTokenToDeposit, uint256 _amount) external {
+        if (IERC20(_collateralTokenToDeposit).balanceOf(msg.sender) < _amount) {
+            revert Engine__InsufficientBalance();
+        }
         s_collateralDeposited[msg.sender][_collateralTokenToDeposit] += _amount;
+        depositCollateral(_collateralTokenToDeposit, _amount);
+        // mint coin
     }
 
     function redeemCollateral(address _collateralTokenToRedeem, uint256 _amount) external {
+        if (s_collateralDeposited[msg.sender][_collateralTokenToRedeem] < _amount) {
+            revert Engine__RedeemAmountHigherThanDeposited();
+        }
         s_collateralDeposited[msg.sender][_collateralTokenToRedeem] -= _amount;
+        IERC20(_collateralTokenToRedeem).transfer(msg.sender, _amount);
     }
 
-    function mintCoin() external {}
+    function mintCoin(uint256 _amount) external moreThanZero(_amount) {
+        s_coinMinted[msg.sender] += _amount;
+    }
 
-    function burnCoin() external {}
+    /**
+     * @notice this is a function for users to burn coin, with the goal to improve their collateralisation and health factor
+     * because there are different situations where users burn coin (regular users improving their own health factor,
+     * but also liquidators burning coin on behalf of another, we create an internal _burnCoin)
+     * @param _amount the amount of coin we are burning
+     */
+    function burnCoin(uint256 _amount) external moreThanZero(_amount) {
+        _burnCoin(msg.sender, msg.sender, _amount);
+    }
+
+    /**
+     *
+     * @param _onBehalfOf this is the users who's coin minted is getting reduced and health factor is being improved
+     * in the "burnCoin" function, which is called by typical users wanting to improve their health factor, this will be
+     * the msg.sender. However, in the liquidate function, where liquidators are burning coin on behalf of another user,
+     * this will be the users address
+     * @param coinFrom The actual address we are burning coin from. In the regular "burnDsc" function, this will be the msg.sender,
+     * but in the liquidate function, this will be the liquidator. Remember, the liquidator takes the users collateral,
+     * and burns coin in replacement to ensure proper protocol token backing
+     * @param _amount the amount of coin we are burning
+     */
+    function _burnCoin(address _onBehalfOf, address coinFrom, uint256 _amount) internal {
+        s_coinMinted[_onBehalfOf] -= _amount;
+        bool success = i_coin.transferFrom(coinFrom, address(this), _amount);
+        if (!success) {
+            revert Engine__TransferFailed();
+        }
+        i_coin.burn(_amount);
+    }
 
     // getter functions
 
     /**
      * @notice fetches the collateral tokens accepted in this protocol. For example, WETH
+     * @return an array of the collateral tokens
      */
     function getCollateralTokens() external view returns (address[] memory) {
         return s_collateralTokens;
