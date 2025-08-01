@@ -36,6 +36,14 @@ contract DeployEngineTest is Test {
         ERC20Mock(weth).mint(user, AMOUNT_MINT);
     }
 
+    modifier depositCollateral() {
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(engine), amountCollateral);
+        engine.depositCollateral(weth, amountCollateral);
+        vm.stopPrank();
+        _;
+    }
+
     // getter tests
 
     function testGetCollateralTokensAreWethAndWbtc() public view {
@@ -66,7 +74,7 @@ contract DeployEngineTest is Test {
         engine.depositCollateral(weth, amount);
         vm.stopPrank();
 
-        uint256 contractWethBalance = ERC20Mock(weth).balanceOf(address(this));
+        uint256 contractWethBalance = ERC20Mock(weth).balanceOf(address(engine));
         assertEq(contractWethBalance, amount);
     }
 
@@ -78,6 +86,26 @@ contract DeployEngineTest is Test {
         vm.expectEmit(true, true, false, true);
         emit CollateralDeposited(address(user), address(weth), amount);
         engine.depositCollateral(weth, amount);
+        vm.stopPrank();
+    }
+
+    function testDepositMoreThanZeroRevert() public {
+        vm.expectRevert(Engine.Engine__MustBeMoreThanZero.selector);
+        engine.depositCollateral(weth, 0);
+    }
+
+    function testDepositNotAcceptedTokenRevert() public {
+        vm.startPrank(user);
+        vm.expectRevert(Engine.Engine__UnacceptedToken.selector);
+        engine.depositCollateral(address(0), amountCollateral);
+        vm.stopPrank();
+    }
+
+    function testDepositInsufficientBalanceRevert() public {
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(engine), 101 ether);
+        vm.expectRevert(Engine.Engine__InsufficientBalance.selector);
+        engine.depositCollateral(weth, 101 ether);
         vm.stopPrank();
     }
 }
