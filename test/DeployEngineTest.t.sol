@@ -9,6 +9,8 @@ import {ERC20Mock} from "../test/mocks/ERC20Mock.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERCMintFail} from "../test/mocks/MockERCMintFail.sol";
+import {MockFailTransfer} from "../test/mocks/MockFailTransfer.sol";
+import {MockFailTransferFrom} from "./mocks/MockFailTransferFrom.sol";
 
 contract DeployEngineTest is Test {
     DeployEngine deployer;
@@ -157,7 +159,7 @@ contract DeployEngineTest is Test {
         engine.mintCoin(0);
     }
 
-    function testMintFailRevert() public depositCollateral {
+    function testMintFailRevert() public {
         MockERCMintFail token = new MockERCMintFail();
         priceFeed = [wethUsdPriceFeed];
         tokenAddresses = [weth];
@@ -174,5 +176,19 @@ contract DeployEngineTest is Test {
     function testBurnNeedsMoreThanZeroRevert() public {
         vm.expectRevert(Engine.Engine__MustBeMoreThanZero.selector);
         engine.burnCoin(0);
+    }
+
+    function testBurnFailRevert() public {
+        MockFailTransferFrom token = new MockFailTransferFrom();
+        priceFeed = [wethUsdPriceFeed];
+        tokenAddresses = [weth];
+        Engine mockEngine = new Engine(priceFeed, tokenAddresses, address(token));
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(mockEngine), amountCollateral);
+        mockEngine.depositCollateral(weth, amountCollateral);
+        mockEngine.mintCoin(1);
+        vm.expectRevert(Engine.Engine__TransferFailed.selector);
+        mockEngine.burnCoin(1);
+        vm.stopPrank();
     }
 }
