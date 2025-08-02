@@ -137,6 +137,7 @@ contract DeployEngineTest is Test {
         console.log("user mapping", userMappingDepositedBeforeRedeeming);
         vm.startPrank(user);
         engine.redeemCollateral(weth, amountCollateral);
+        console.log("user health factor", engine.getUserHealthFactor(user));
         vm.stopPrank();
         uint256 userCollateralBalanceAfterRedeeming = ERC20Mock(weth).balanceOf(user);
         uint256 userMappingDepositedAfterRedeeming = engine.getCollateralAmountUserDeposited(user, weth);
@@ -165,6 +166,34 @@ contract DeployEngineTest is Test {
         mockEngine.redeemCollateral(address(token), 1 ether);
         console.log("user balance after redeeming", ERC20Mock(weth).balanceOf(user));
         vm.stopPrank();
+    }
+
+    function testRedeemCollateralForCoinIncreasesUsersCollateralBalanceAndDecreasesCoinBalance()
+        public
+        depositCollateral
+    {
+        uint256 userCollateralBalanceBeforeRedeeming = ERC20Mock(weth).balanceOf(user);
+        uint256 userMappingDepositedBeforeRedeeming = engine.getCollateralAmountUserDeposited(user, weth);
+        vm.startPrank(user);
+        console.log("user health factor", engine.getUserHealthFactor(user));
+        engine.mintCoin(amountCollateral);
+        console.log("user health factor", engine.getUserHealthFactor(user));
+        uint256 userCoinBalanceBeforeRedeeming = coin.balanceOf(user);
+
+        // note: this commented-out function with revert because the user does not burn the coin they minted - breaking the health factor
+        // engine.redeemCollateral(weth, amountCollateral);
+
+        IERC20(coin).approve(address(engine), amountCollateral);
+        engine.redeemCollateralForCoin(weth, (amountCollateral / 2), (amountCollateral / 2));
+
+        vm.stopPrank();
+        uint256 userCollateralBalanceAfterRedeeming = ERC20Mock(weth).balanceOf(user);
+        uint256 userMappingDepositedAfterRedeeming = engine.getCollateralAmountUserDeposited(user, weth);
+        uint256 userCoinBalanceAfterRedeeming = coin.balanceOf(user);
+
+        assertGt(userCollateralBalanceAfterRedeeming, userCollateralBalanceBeforeRedeeming);
+        assertGt(userMappingDepositedBeforeRedeeming, userMappingDepositedAfterRedeeming);
+        assertGt(userCoinBalanceBeforeRedeeming, userCoinBalanceAfterRedeeming);
     }
 
     // mint

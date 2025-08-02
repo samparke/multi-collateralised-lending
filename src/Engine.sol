@@ -114,7 +114,7 @@ contract Engine {
     }
 
     /**
-     *
+     * @notice this function trades in coin to allow the user to redeem their collateral
      * @param _tokenCollateralAddress the token we are redeeming
      * @param _amount the amount the redeem
      * @param burnAmount the amount we burn, to allow us to redeem the collateral. Before redeeming collateral, we must burn the COIN
@@ -330,5 +330,9 @@ contract Engine {
 
     function getCollateralAmountUserDeposited(address _user, address _token) external view returns (uint256) {
         return (s_collateralDeposited[_user][_token]);
+    }
+
+    function getUserHealthFactor(address _user) external view returns (uint256) {
+        return _healthFactor(_user);
     }
 }
