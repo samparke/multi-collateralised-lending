@@ -96,11 +96,11 @@ contract Engine {
             revert Engine__InsufficientBalance();
         }
         s_collateralDeposited[msg.sender][_collateralTokenToDeposit] += _amount;
+        emit CollateralDeposited(msg.sender, _collateralTokenToDeposit, _amount);
         bool success = IERC20(_collateralTokenToDeposit).transferFrom(msg.sender, address(this), _amount);
         if (!success) {
             revert Engine__TransferFailed();
         }
-        emit CollateralDeposited(msg.sender, _collateralTokenToDeposit, _amount);
     }
 
     /**
@@ -152,11 +152,11 @@ contract Engine {
             revert Engine__RedeemAmountHigherThanDeposited();
         }
         s_collateralDeposited[_from][_collateralTokenToRedeem] -= _amount;
+        emit CollateralRedeemed(_from, _to, _collateralTokenToRedeem, _amount);
         bool success = IERC20(_collateralTokenToRedeem).transfer(_to, _amount);
         if (!success) {
             revert Engine__TransferFailed();
         }
-        emit CollateralRedeemed(_from, _to, _collateralTokenToRedeem, _amount);
     }
 
     /**
@@ -334,5 +334,29 @@ contract Engine {
 
     function getUserHealthFactor(address _user) external view returns (uint256) {
         return _healthFactor(_user);
+    }
+
+    function getPrecision() external pure returns (uint256) {
+        return PRECISION;
+    }
+
+    function getLiquidationThreshold() external pure returns (uint256) {
+        return LIQUIDATION_THRESHOLD;
+    }
+
+    function getLiquidationBonus() external pure returns (uint256) {
+        return LIQUIDATION_BONUS;
+    }
+
+    function getLiquidationPrecision() external pure returns (uint256) {
+        return LIQUIDATION_PRECISION;
+    }
+
+    function getMinimumHealthFactor() external pure returns (uint256) {
+        return MINIMUM_HEALTH_FACTOR;
+    }
+
+    function getAdditionalPriceFeedPrecision() external pure returns (uint256) {
+        return ADDITIONAL_FEED_PRECISION;
     }
 }

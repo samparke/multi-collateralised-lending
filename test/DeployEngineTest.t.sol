@@ -11,6 +11,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERCMintFail} from "../test/mocks/MockERCMintFail.sol";
 import {MockFailTransfer} from "../test/mocks/MockFailTransfer.sol";
 import {MockFailTransferFrom} from "./mocks/MockFailTransferFrom.sol";
+import {MockV3Aggregator} from "./mocks/MockV3Aggregator.sol";
 
 contract DeployEngineTest is Test {
     DeployEngine deployer;
@@ -49,12 +50,46 @@ contract DeployEngineTest is Test {
         _;
     }
 
+    // constructor tests
+
+    function testEngineIsInitialisedWithDifferentLengthTokenAndPriceFeeds() public {
+        priceFeed = [wethUsdPriceFeed];
+        tokenAddresses = [weth, wbtc];
+        Coin token = new Coin();
+        vm.expectRevert(Engine.Engine__TokenAddressesAndPriceFeedAddressesMustBeTheSameLength.selector);
+        Engine failEngine = new Engine(priceFeed, tokenAddresses, address(token));
+    }
+
     // getter tests
 
     function testGetCollateralTokensAreWethAndWbtc() public view {
         address[] memory tokens = engine.getCollateralTokens();
         assertEq(tokens[0], weth);
         assertEq(tokens[1], wbtc);
+    }
+
+    function testGetLiquidationPrecision() public view {
+        assertEq(engine.getLiquidationPrecision(), 100);
+    }
+
+    function testGetLiquidationBonus() public view {
+        assertEq(engine.getLiquidationBonus(), 10);
+    }
+
+    function testGetLiquidationThreshold() public view {
+        assertEq(engine.getLiquidationThreshold(), 50);
+    }
+
+    function testGetMinimumHealthFactor() public view {
+        assertEq(engine.getMinimumHealthFactor(), 1e18);
+    }
+
+    function testGetPrecision() public view {
+        assertEq(engine.getPrecision(), 1e18);
+    }
+
+    function testGetAdditionalPriceFeedPrecision() public view {
+        assertEq(engine.getAdditionalPriceFeedPrecision(), 1e10);
     }
 
     // deposit
@@ -127,6 +162,23 @@ contract DeployEngineTest is Test {
 
         assertGt(userDepositAmount, userStartingDepositAmount);
         assertGt(userMintBalance, userStartingMintBalance);
+    }
+
+    function testDepositCollateralTransferFromFail() public {
+        // because this test is trying to fail the transfer function in the deposit collateral function,
+        // we are trying to make the weth transfer fail
+        // therefore, the weth is the mock fail token in this instance
+        MockFailTransferFrom mockCollateral = new MockFailTransferFrom();
+        mockCollateral.mint(user, amountCollateral);
+        priceFeed = [wethUsdPriceFeed];
+        tokenAddresses = [address(mockCollateral)];
+        Engine mockEngine = new Engine(priceFeed, tokenAddresses, address(coin));
+
+        vm.startPrank(user);
+        ERC20Mock(address(mockCollateral)).approve(address(mockEngine), amountCollateral);
+        vm.expectRevert(Engine.Engine__TransferFailed.selector);
+        mockEngine.depositCollateral(address(mockCollateral), amountCollateral);
+        vm.stopPrank();
     }
 
     // redeem
@@ -234,5 +286,16 @@ contract DeployEngineTest is Test {
         vm.expectRevert(Engine.Engine__TransferFailed.selector);
         mockEngine.burnCoin(1);
         vm.stopPrank();
+    }
+
+    // health factor tests
+
+    function testUserHealthFactorCanBeBroken() public depositCollateral {
+        vm.startPrank(user);
+        engine.mintCoin(AMOUNT_MINT);
+        vm.stopPrank();
+        // drops down to $5
+        MockV3Aggregator(wethUsdPriceFeed).updateAnswer(5e8);
+        assertLt(engine.getUserHealthFactor(user), 1 ether);
     }
 }
