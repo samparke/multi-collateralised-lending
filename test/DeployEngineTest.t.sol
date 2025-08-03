@@ -23,6 +23,7 @@ contract DeployEngineTest is Test {
     address wethUsdPriceFeed;
     address wbtcUsdPriceFeed;
     address user = makeAddr("user");
+    address liquidatior = makeAddr("liquidatior");
     uint256 public AMOUNT_MINT = 100 ether;
     uint256 public amountCollateral = 10 ether;
     address[] public tokenAddresses;
@@ -90,6 +91,39 @@ contract DeployEngineTest is Test {
 
     function testGetAdditionalPriceFeedPrecision() public view {
         assertEq(engine.getAdditionalPriceFeedPrecision(), 1e10);
+    }
+
+    function testGetUserCoinHasMinted() public depositCollateral {
+        vm.prank(user);
+        engine.mintCoin(amountCollateral);
+
+        assertEq(engine.getCoinUserHasMinted(user), amountCollateral);
+    }
+
+    function testGetAccountInformation() public depositCollateral {
+        vm.prank(user);
+        engine.mintCoin(1 ether);
+        (uint256 totalCoinMinted, uint256 collateralValue) = engine.getAccountInformation(user);
+
+        uint256 expectedAmountMinted = 1 ether;
+        uint256 expectedCollateralValue = 2000 * 10 ether;
+        assertEq(totalCoinMinted, expectedAmountMinted);
+        assertEq(collateralValue, expectedCollateralValue);
+    }
+
+    function testGetTokenValueInUsd() public view {
+        uint256 expectedTokenValueInUsd = 2000e18;
+        assertEq(engine.getTokenValueInUsd(weth, 1 ether), expectedTokenValueInUsd);
+    }
+
+    function testGetAccountCollateralValueInUsd() public depositCollateral {
+        uint256 expectedAccountValueInUsd = 2000e18 * 10;
+        assertEq(engine.getAccountCollateralValueInUsd(user), expectedAccountValueInUsd);
+    }
+
+    function testGetTokenAmountFromUsd() public view {
+        uint256 expectedTokenAmount = 1e18;
+        assertEq(engine.getTokenAmountFromUsd(weth, 2000e18), expectedTokenAmount);
     }
 
     // deposit
@@ -293,10 +327,14 @@ contract DeployEngineTest is Test {
     function testUserHealthFactorCanBeBroken() public depositCollateral {
         vm.startPrank(user);
         engine.mintCoin(AMOUNT_MINT);
-        vm.stopPrank();
+
         // drops down to $5
         MockV3Aggregator(wethUsdPriceFeed).updateAnswer(5e8);
         assertLt(engine.getUserHealthFactor(user), 1 ether);
+
+        vm.expectPartialRevert(Engine.Engine__BrokenHealthFactor.selector);
+        engine.mintCoin(1 ether);
+        vm.stopPrank();
     }
 
     function testHealthFactorIsWorkingProperly() public depositCollateral {
@@ -314,7 +352,19 @@ contract DeployEngineTest is Test {
         // (10,000e18 * 1e18) / totalDscMinted (10e18)
         // this is equivalent to: 10,000e18 / 10e18 (10,000 / 10) = 1,000
         // then, 1,000 * 1e18 to scale it to ether decimals
-
+        uint256 userHealthFactor = engine._healthFactor(user);
         assertEq(engine.getUserHealthFactor(user), 1000 ether);
+        assertEq(engine.getUserHealthFactor(user), userHealthFactor);
+    }
+
+    // liquidation tests
+    function testCannotLiquidateGoodHealthFactor() public depositCollateral {
+        ERC20Mock(weth).mint(liquidatior, 100 ether);
+        vm.startPrank(user);
+        engine.mintCoin(amountCollateral);
+        vm.stopPrank();
+        vm.prank(liquidatior);
+        vm.expectRevert(Engine.Engine__HealthFactorIsOk.selector);
+        engine.liquidate(user, weth, 1 ether);
     }
 }

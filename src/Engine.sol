@@ -323,7 +323,7 @@ contract Engine {
         // we then divide this by price (scaled up to 18 decimals - as chainlink returns it in 8)
         // this leaves us with (usdamount (36 decimals) / price (18 decimals))
         // = token amount (18 decimals) - 18 decimals aligning with wei
-        return ((_usdAmountInWei * PRECISION) / uint256(price) * ADDITIONAL_FEED_PRECISION);
+        return ((_usdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION));
     }
 
     // --------------------------------------------------------------------------------------------------------
