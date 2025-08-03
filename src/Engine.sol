@@ -391,34 +391,61 @@ contract Engine {
         return s_coinMinted[_user];
     }
 
+    /**
+     * @notice this function gets the collateral amount the user has deposited
+     * @param _user the user whose collateral amount deposited we want to know
+     * @param _token the specific token we are finding the value for
+     */
     function getCollateralAmountUserDeposited(address _user, address _token) external view returns (uint256) {
         return (s_collateralDeposited[_user][_token]);
     }
 
+    /**
+     * @notice this function gets the users health factor
+     * @param _user the user whose health factor we are trying to identify
+     */
     function getUserHealthFactor(address _user) external view returns (uint256) {
         return _healthFactor(_user);
     }
 
+    /**
+     * @notice this function retreives the precision
+     */
     function getPrecision() external pure returns (uint256) {
         return PRECISION;
     }
 
+    /**
+     * @notice this function retreives the liquidation threshold
+     */
     function getLiquidationThreshold() external pure returns (uint256) {
         return LIQUIDATION_THRESHOLD;
     }
 
+    /**
+     * @notice this function retreives the liquidation bonus
+     */
     function getLiquidationBonus() external pure returns (uint256) {
         return LIQUIDATION_BONUS;
     }
 
+    /**
+     * @notice this function retreives the liquidation precision
+     */
     function getLiquidationPrecision() external pure returns (uint256) {
         return LIQUIDATION_PRECISION;
     }
 
+    /**
+     * @notice this function retreives the minimum health factor for the protocol
+     */
     function getMinimumHealthFactor() external pure returns (uint256) {
         return MINIMUM_HEALTH_FACTOR;
     }
 
+    /**
+     * @notice this function retreives the additional price feed precision
+     */
     function getAdditionalPriceFeedPrecision() external pure returns (uint256) {
         return ADDITIONAL_FEED_PRECISION;
     }

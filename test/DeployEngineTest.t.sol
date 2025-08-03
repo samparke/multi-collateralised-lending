@@ -23,7 +23,7 @@ contract DeployEngineTest is Test {
     address wethUsdPriceFeed;
     address wbtcUsdPriceFeed;
     address user = makeAddr("user");
-    uint256 public constant AMOUNT_MINT = 100 ether;
+    uint256 public AMOUNT_MINT = 100 ether;
     uint256 public amountCollateral = 10 ether;
     address[] public tokenAddresses;
     address[] public priceFeed;
@@ -39,7 +39,7 @@ contract DeployEngineTest is Test {
         (engine, coin, config) = deployer.run();
         // we can then get the address for weth and wethUsdPriceFeed the correct configurated addresses
         (weth, wbtc, wethUsdPriceFeed, wbtcUsdPriceFeed,) = config.activeNetworkConfig();
-        ERC20Mock(weth).mint(user, AMOUNT_MINT);
+        ERC20Mock(weth).mint(user, amountCollateral);
     }
 
     modifier depositCollateral() {
@@ -297,5 +297,24 @@ contract DeployEngineTest is Test {
         // drops down to $5
         MockV3Aggregator(wethUsdPriceFeed).updateAnswer(5e8);
         assertLt(engine.getUserHealthFactor(user), 1 ether);
+    }
+
+    function testHealthFactorIsWorkingProperly() public depositCollateral {
+        vm.startPrank(user);
+        engine.mintCoin(amountCollateral);
+        vm.stopPrank();
+
+        // we deposited 10 ether priced at 2000
+        // collateralAdjustedForThreshold = ((20,000 * 50) / 100) = 10,000
+        // just see the 50 and 100 calculation as dividing 20,000 by half, because 200% collateralisation - meaning we need double
+        // the calculation above, for simplicity sake, was done in normal decimals. This is purely for us to understand
+
+        // here (10,000e18), we use ether decimals so the calculation is correct
+        // the calculation: ((collateralAdjusted * PRECISION) / totalCoinMinted);
+        // (10,000e18 * 1e18) / totalDscMinted (10e18)
+        // this is equivalent to: 10,000e18 / 10e18 (10,000 / 10) = 1,000
+        // then, 1,000 * 1e18 to scale it to ether decimals
+
+        assertEq(engine.getUserHealthFactor(user), 1000 ether);
     }
 }
