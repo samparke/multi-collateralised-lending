@@ -57,7 +57,7 @@ contract DeployEngineTest is Test {
         tokenAddresses = [weth, wbtc];
         Coin token = new Coin();
         vm.expectRevert(Engine.Engine__TokenAddressesAndPriceFeedAddressesMustBeTheSameLength.selector);
-        Engine failEngine = new Engine(priceFeed, tokenAddresses, address(token));
+        new Engine(priceFeed, tokenAddresses, address(token));
     }
 
     // getter tests

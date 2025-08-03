@@ -15,6 +15,8 @@ contract Engine {
     error Engine__InsufficientBalance();
     error Engine__BrokenHealthFactor(uint256 healthFactor);
     error Engine__MintFailed();
+    error Engine__HealthFactorIsOk();
+    error Engine__HealthFactorNotImproved();
 
     // events
     event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
@@ -306,6 +308,67 @@ contract Engine {
         // you'd be multiplying incorrect value (due to confusion with decimal places)
         // we then scale it back down to usd by multiplying by PRECISION (1e18, 18 decimal places)
         return (uint256(price) * ADDITIONAL_FEED_PRECISION * _amount) / PRECISION;
+    }
+
+    /**
+     * @notice this function calculates the amount of tokens that could be purchased given an amount of usd in wei
+     * @param _token the token we are getting the amount for
+     * @param _usdAmountInWei the amount of usd in wei that equates to the amount of tokens
+     */
+    function getTokenAmountFromUsd(address _token, uint256 _usdAmountInWei) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[_token]);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+
+        // we scale the usd amount in wei (which is already in 18 decimal format) to 36 decimals)
+        // we then divide this by price (scaled up to 18 decimals - as chainlink returns it in 8)
+        // this leaves us with (usdamount (36 decimals) / price (18 decimals))
+        // = token amount (18 decimals) - 18 decimals aligning with wei
+        return ((_usdAmountInWei * PRECISION) / uint256(price) * ADDITIONAL_FEED_PRECISION);
+    }
+
+    // --------------------------------------------------------------------------------------------------------
+    // LIQUIDATE
+    // --------------------------------------------------------------------------------------------------------
+
+    /**
+     * @notice this function allows the liquidator to liquidate the user, redeeming the collateral (which equates to the debtToCover in COIN), plus a 10% bonus
+     * @param _user the user we are liquidating
+     * @param _tokenCollateralToLiquidate the specific token to liquidate, such as weth
+     * @param _debtToCover this is the amount the liquidator wants to liquidate. It could be full or partial, and would be calculated off-chain
+     * @dev how liquidation actually works:
+     * lets say the user mints a certain amount of coin (pegged to $1). At this point, the user does not have any debt as their collateral value deposited is adequate
+     * however, if the collateral amount drops, as they still hold the stablecoin which equates to the previous collateral value (before the price dropped),
+     * they are now in debt. They owe collateral to make the value of collateral = stablecoin balance (in the protocol, not the users actual balance).
+     * This is where overcollateralisation comes in.
+     * we can take their collateral (from their overcollateralised position), give it to the liquidator, and burn the liquidators stablecoin
+     * This ensures that there isn't too much stablecoin in circulation (our protocol is backed by enough collateral)
+     * important note: the debt is created when the price drops. The liquidation is a mechanism to reduce the debt.
+     * We give the liquidator the amount of debt the user owes in collateral value, and burn the liquidators stablecoin
+     *
+     */
+    function liquidate(address _user, address _tokenCollateralToLiquidate, uint256 _debtToCover) external {
+        uint256 userStartingHealthFactor = _healthFactor(_user);
+        if (userStartingHealthFactor >= MINIMUM_HEALTH_FACTOR) {
+            revert Engine__HealthFactorIsOk();
+        }
+        // as the debtToCover (coin) is a stablecoin, it is passed as the usdAmountInWei
+        // it asks the function: how much collateral is x stablecoin worth
+        // it then gives this to the liquidator (plus a bonus), and the liquidator burns their debt to cover to balance it out
+        uint256 tokenAmountFromUsd = getTokenAmountFromUsd(_tokenCollateralToLiquidate, _debtToCover);
+        uint256 bonusCollateral = (tokenAmountFromUsd * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
+        uint256 totalCollateralToRedeemForLiquidator = tokenAmountFromUsd + bonusCollateral;
+
+        _redeemCollateral(_tokenCollateralToLiquidate, totalCollateralToRedeemForLiquidator, _user, msg.sender);
+        // only the public redeemCollateral function has a burnDsc call within it, not the _redeemCollateral. So we must call it
+        // we pass the _user as we reduce their coin minted mapping, msg.sender because its the liquidator's coins we are burning
+        // and the debtToCover (not the totalCollateralToRedeemForLiquidator), because we already calculates the conversion into collateral value
+        _burnCoin(_user, msg.sender, _debtToCover);
+
+        uint256 userEndingHealthFactor = _healthFactor(_user);
+        if (userEndingHealthFactor >= userStartingHealthFactor) {
+            revert Engine__HealthFactorNotImproved();
+        }
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
 
     // --------------------------------------------------------------------------------------------------------
