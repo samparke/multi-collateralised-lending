@@ -28,7 +28,6 @@ contract DeployEngineTest is Test {
     uint256 public amountCollateral = 10 ether;
     address[] public tokenAddresses;
     address[] public priceFeed;
-    uint256 sepoliaFork;
 
     event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
     event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
@@ -40,7 +39,7 @@ contract DeployEngineTest is Test {
         // after the run function in DeployEngine (deployer), the appropriate (and thus addresses configurations) chain will be identified.
         (engine, coin, config) = deployer.run();
         // we can then get the address for weth and wethUsdPriceFeed the correct configurated addresses
-        (weth, wbtc, wethUsdPriceFeed, wbtcUsdPriceFeed,) = config.activeNetworkConfig();
+        (weth, wbtc, wethUsdPriceFeed, wbtcUsdPriceFeed) = config.activeNetworkConfig();
         ERC20Mock(weth).mint(user, amountCollateral);
     }
 

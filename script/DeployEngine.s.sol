@@ -19,12 +19,12 @@ contract DeployEngine is Script {
      */
     function run() external returns (Engine, Coin, HelperConfig) {
         HelperConfig config = new HelperConfig();
-        (address weth, address wbtc, address wethUsdPriceFeed, address wbtcUsdPriceFeed, uint256 deployerKey) =
+        (address weth, address wbtc, address wethUsdPriceFeed, address wbtcUsdPriceFeed /*uint256 deployerKey*/ ) =
             config.activeNetworkConfig();
         tokenAddresses = [weth, wbtc];
         priceFeedAddresses = [wethUsdPriceFeed, wbtcUsdPriceFeed];
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast( /*deployerKey*/ );
         Coin coin = new Coin();
         Engine engine = new Engine(priceFeedAddresses, tokenAddresses, address(coin));
         coin.grantMintAndBurnRole(address(engine));
