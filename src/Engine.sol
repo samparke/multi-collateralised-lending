@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Coin} from "../src/Coin.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {OracleLib} from "./libraries/OracleLib.sol";
 
 contract Engine {
     // errors
@@ -17,6 +18,8 @@ contract Engine {
     error Engine__MintFailed();
     error Engine__HealthFactorIsOk();
     error Engine__HealthFactorNotImproved();
+
+    using OracleLib for AggregatorV3Interface;
 
     // events
     event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
@@ -301,7 +304,7 @@ contract Engine {
      */
     function getTokenValueInUsd(address _token, uint256 _amount) public view returns (uint256 tokenValue) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[_token]);
-        (, int256 price,,,) = priceFeed.latestRoundData();
+        (, int256 price,,,) = priceFeed.staleCheckLatestRoundData();
         // chainlink returns the price in 8 decimals
         // we scale it up to 18 decimal places (by multiplying by ADDITIONAL_FEED_PRECISION (1e10, 10 decimal places))
         // then we multiply the now-1e18 price by the 1e18 amount the user has. If we didn't do these conversions,
@@ -317,7 +320,7 @@ contract Engine {
      */
     function getTokenAmountFromUsd(address _token, uint256 _usdAmountInWei) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[_token]);
-        (, int256 price,,,) = priceFeed.latestRoundData();
+        (, int256 price,,,) = priceFeed.staleCheckLatestRoundData();
 
         // we scale the usd amount in wei (which is already in 18 decimal format) to 36 decimals)
         // we then divide this by price (scaled up to 18 decimals - as chainlink returns it in 8)

@@ -28,6 +28,7 @@ contract DeployEngineTest is Test {
     uint256 public amountCollateral = 10 ether;
     address[] public tokenAddresses;
     address[] public priceFeed;
+    uint256 sepoliaFork;
 
     event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
     event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
@@ -122,7 +123,8 @@ contract DeployEngineTest is Test {
     }
 
     function testGetTokenAmountFromUsd() public view {
-        uint256 expectedTokenAmount = 1e18;
+        uint256 expectedTokenAmount = 1 ether;
+        // because eth is priced at $2000, it should you give you 1 ether
         assertEq(engine.getTokenAmountFromUsd(weth, 2000e18), expectedTokenAmount);
     }
 
